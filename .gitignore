@@ -1,6 +1,3 @@
-# ============================================================================
-# Build artefacts
-# ============================================================================
 build/
 sdkconfig
 sdkconfig.old
@@ -10,13 +7,7 @@ dependencies.lock
 dist/
 .DS_Store
 
-# ============================================================================
-# Vendor-private firmware sources (must NOT be committed)
-# ============================================================================
-# Raw firmware preprocessor outputs that disclose panel vendor part numbers
-# (e.g. HQR*, FPC-*, KY*) are kept locally for build/inspection only.
-# The publishable distribution uses the vetted `include/axs5106l_firmware.h`
-# byte array, which carries no panel vendor identifiers.
+# Vendor-private firmware preprocessor sources (must NOT be committed)
 *.i
 *HQR*
 *KY[0-9]*

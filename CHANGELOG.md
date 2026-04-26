@@ -4,6 +4,49 @@ All notable changes to **esp_lcd_touch_axs5106l** will be documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-26
+
+### ⚠️ BREAKING CHANGES
+
+Driver fully rewritten in **C** to align with the Espressif ecosystem (100% of `esp_lcd_touch` drivers in the Registry are written in C). Existing C++ users must migrate.
+
+### Changed
+
+- `class Axs5106lTouch` → opaque `axs5106l_touch_handle_t` + free functions.
+- `enum class TouchGesture` → `typedef enum` with `AXS5106L_GESTURE_*` prefix.
+- `class Axs5106lUpgrade` → opaque `axs5106l_upgrade_handle_t` + free functions in `axs5106l_upgrade.h`.
+- Two-phase init renamed: `InitializeHardware()` → `axs5106l_touch_new()`; `InitializeInput()` → `axs5106l_touch_attach_lvgl()`.
+- Constructor takes a `axs5106l_touch_config_t` struct (use `AXS5106L_TOUCH_DEFAULT_CONFIG()` macro).
+- Callbacks (`axs5106l_wake_cb_t`, `axs5106l_gesture_cb_t`) use C function pointers + `void *user_ctx` instead of `std::function` lambdas.
+- Lifecycle now reports `esp_err_t` (was `bool`).
+
+### Migration
+
+```c
+// before (v1.0.x, C++)
+auto* tp = new Axs5106lTouch(bus, RST, INT, W, H, swap, mx, my);
+tp->InitializeHardware();
+// ... start LVGL ...
+tp->InitializeInput();
+tp->SetGestureCallback([this](TouchGesture g, int16_t x, int16_t y) { ... });
+delete tp;
+
+// after (v2.0.0, C)
+axs5106l_touch_handle_t tp = NULL;
+axs5106l_touch_config_t cfg = AXS5106L_TOUCH_DEFAULT_CONFIG(bus, RST, INT, W, H);
+cfg.swap_xy = swap; cfg.mirror_x = mx; cfg.mirror_y = my;
+axs5106l_touch_new(&cfg, &tp);
+// ... start LVGL ...
+axs5106l_touch_attach_lvgl(tp);
+axs5106l_touch_set_gesture_callback(tp, on_gesture, this);  // static fn + this ctx
+axs5106l_touch_del(tp);
+```
+
+### Notes
+
+- Wire protocol, register sequences, gesture thresholds and firmware-upgrade flow unchanged. Behavior is bit-for-bit identical to v1.0.2.
+- Embedded firmware image (`axs5106l_firmware.h`) is unchanged.
+
 ## [1.0.2] - 2026-04-26
 
 ### Changed

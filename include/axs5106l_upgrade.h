@@ -1,85 +1,75 @@
 /*
- * AXS5106L touch-controller firmware upgrade module.
+ * SPDX-FileCopyrightText: 2026 mydazy
+ * SPDX-License-Identifier: Apache-2.0
  *
- * Verifies the firmware version reported by the chip and reflashes the MTP
- * region from an embedded image when the versions differ.
+ * AXS5106L touch-controller firmware upgrade helper — C API.
+ *
+ * Reads the running firmware version from the chip and, when it differs from
+ * the version embedded in @c axs5106l_firmware.h, performs a full MTP reflash
+ * via the chip's debug-mode command sequence.
+ *
+ * Typical usage:
+ *   axs5106l_upgrade_handle_t up;
+ *   axs5106l_upgrade_init(i2c_handle, rst_gpio, &up);
+ *   if (axs5106l_upgrade_run(up) == AXS5106L_UPGRADE_SUCCESS) { ... }
+ *   axs5106l_upgrade_del(up);
  */
 
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
 #include <driver/i2c_master.h>
 #include <driver/gpio.h>
-#include <cstdint>
+#include <esp_err.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// Opaque upgrader handle.
+typedef struct axs5106l_upgrade_t *axs5106l_upgrade_handle_t;
 
 /// Result of a firmware upgrade attempt.
-enum class Axs5106lUpgradeResult {
-    Success   =  0,  ///< Upgrade completed successfully.
-    NotNeeded = -1,  ///< Chip firmware already matches the embedded image.
-    Failed    = -2,  ///< Upgrade flow failed (erase/write/verify error).
-    I2cError  = -3,  ///< I2C communication error.
-};
+typedef enum {
+    AXS5106L_UPGRADE_SUCCESS    =  0,  ///< Upgrade completed successfully.
+    AXS5106L_UPGRADE_NOT_NEEDED = -1,  ///< Chip firmware already matches the embedded image.
+    AXS5106L_UPGRADE_FAILED     = -2,  ///< Upgrade flow failed (erase/write/verify error).
+    AXS5106L_UPGRADE_I2C_ERROR  = -3,  ///< I2C communication error.
+} axs5106l_upgrade_result_t;
 
 /**
- * @brief AXS5106L firmware upgrade helper.
+ * @brief Allocate an upgrader bound to an I2C device and reset GPIO.
  *
- * Reads the running firmware version from the chip and, when it differs from
- * the version embedded in @c axs5106l_firmware.h, performs a full MTP
- * reflash via the chip's debug-mode command sequence.
- *
- * Typical usage:
- *   1. Construct with the I2C device handle and the reset GPIO.
- *   2. Call @ref CheckAndUpgrade().
- *   3. If the result is Success, reset the chip before continuing.
+ * @param[in]  i2c_handle I2C device handle (already added to a master bus).
+ * @param[in]  rst_gpio   GPIO connected to the chip reset line.
+ * @param[out] out        Receives the handle on success.
  */
-class Axs5106lUpgrade {
-public:
-    /**
-     * @brief Construct the upgrade helper.
-     * @param i2c_handle I2C device handle (already added to a master bus).
-     * @param rst_gpio   GPIO connected to the chip reset line.
-     */
-    Axs5106lUpgrade(i2c_master_dev_handle_t i2c_handle, gpio_num_t rst_gpio);
+esp_err_t axs5106l_upgrade_init(i2c_master_dev_handle_t i2c_handle,
+                                gpio_num_t rst_gpio,
+                                axs5106l_upgrade_handle_t *out);
 
-    /**
-     * @brief Compare versions and reflash if necessary.
-     * @return Upgrade result; see @ref Axs5106lUpgradeResult.
-     */
-    Axs5106lUpgradeResult CheckAndUpgrade();
+/// Free the upgrader.
+void axs5106l_upgrade_del(axs5106l_upgrade_handle_t h);
 
-    /**
-     * @brief Read the firmware version currently running on the chip.
-     * @param[out] version Firmware version reported by the chip.
-     * @return true on success.
-     */
-    bool GetChipFirmwareVersion(uint16_t& version);
+/**
+ * @brief Compare versions and reflash if necessary.
+ * @return Result code; see @ref axs5106l_upgrade_result_t.
+ */
+axs5106l_upgrade_result_t axs5106l_upgrade_run(axs5106l_upgrade_handle_t h);
 
-    /// Version of the firmware image embedded in this build.
-    uint16_t GetEmbeddedFirmwareVersion() const;
+/**
+ * @brief Read the firmware version currently running on the chip.
+ * @param[out] version Firmware version reported by the chip.
+ * @return true on success.
+ */
+bool axs5106l_upgrade_get_chip_version(axs5106l_upgrade_handle_t h,
+                                       uint16_t *version);
 
-private:
-    i2c_master_dev_handle_t i2c_handle_;
-    gpio_num_t rst_gpio_;
+/// Version of the firmware image embedded in this build.
+uint16_t axs5106l_upgrade_get_embedded_version(void);
 
-    // Low-level I2C primitives.
-    bool WriteRegister(uint8_t reg, const uint8_t* data, size_t len);
-    bool ReadRegister(uint8_t reg, uint8_t* data, size_t len);
-    bool WriteRegisters(const uint8_t* reg, size_t reg_len, const uint8_t* data, size_t data_len);
-    bool ReadRegisters(const uint8_t* reg, size_t reg_len, uint8_t* data, size_t data_len);
-
-    // Reset.
-    void HardwareReset();
-    void SoftwareReset();
-
-    // Upgrade flow stages.
-    bool EnterDebugMode();
-    void ExitDebugMode();
-    bool UnlockFlash();
-    bool EraseFlash();
-    bool WriteFlash(const uint8_t* data, size_t len);
-    bool VerifyFlash(const uint8_t* data, size_t len);
-    bool DoUpgrade();
-
-    // Delay helpers.
-    static void DelayMs(uint16_t ms);
-    static void DelayUs(uint16_t us);
-};
+#ifdef __cplusplus
+}  /* extern "C" */
+#endif
