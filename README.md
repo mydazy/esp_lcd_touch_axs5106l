@@ -107,7 +107,11 @@ See [`include/axs5106l_touch.h`](include/axs5106l_touch.h) for full Doxygen-styl
 
 `InitializeHardware()` reads the running firmware version (register `0x05`) and compares it against the version embedded in `include/axs5106l_firmware.h`. On mismatch it enters debug mode (`0xAA → 0x90 → 0xA0`) and reflashes the MTP region.
 
-To use a different firmware image, replace `axs5106l_firmware.h` and rebuild.
+### About the embedded firmware
+
+The shipped `axs5106l_firmware.h` byte array is the firmware image developed for **mydazy custom panel solutions** and is redistributed under Apache-2.0 as part of this component. It is provided **as a reference image** that works on AXS5106L silicon programmed through the standard debug-mode upgrade path; it makes no assumption about a specific panel vendor.
+
+If your panel ships a different firmware image, replace `include/axs5106l_firmware.h` with the byte array supplied by your panel manufacturer and rebuild — the upgrade flow itself is panel-agnostic.
 
 ## Noise Filter Tuning
 

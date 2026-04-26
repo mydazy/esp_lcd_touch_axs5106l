@@ -233,7 +233,8 @@ bool Axs5106lTouch::ReadRegister(uint8_t reg, uint8_t* data, size_t len) {
         }
         vTaskDelay(pdMS_TO_TICKS(5));
     }
-    // 连续失败累积：4G RF 弱网时可能锁死 SDA，发 9 个 SCL 脉冲解锁整条总线
+    // Consecutive-failure recovery: strong RF interference can lock SDA low.
+    // Reset the bus (issues 9 SCL pulses internally) per the I2C recovery spec.
     if (++i2c_err_streak_ >= 3) {
         ESP_LOGW(TAG, "I2C bus recovery (streak=%d)", i2c_err_streak_);
         i2c_master_bus_reset(i2c_bus_);

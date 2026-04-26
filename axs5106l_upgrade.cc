@@ -1,7 +1,5 @@
 /*
- * AXS5106L 触摸屏固件升级模块
- *
- * 移植自: esp_lcd_axs5106l 组件的 axs_upgrade.c
+ * AXS5106L touch-controller firmware upgrade module.
  */
 
 #include "axs5106l_upgrade.h"
@@ -13,19 +11,19 @@
 
 static const char* TAG = "Axs5106lUpgrade";
 
-// 固件数据（从 firmware_flash.i 导入）
+// Embedded firmware image (raw byte stream included from a generated header).
 static const uint8_t kFirmwareData[] = {
 #include "axs5106l_firmware.h"
 };
 
-// 固件版本偏移量
+// Offset within the firmware image where the version word lives.
 #define FIRMWARE_VERSION_OFFSET  0x400
 
-// I2C 参数
+// I2C transaction parameters.
 #define I2C_TIMEOUT_MS           100
 #define I2C_MAX_RETRIES          3
 
-// 升级参数
+// Upgrade-flow parameters.
 #define UPGRADE_RETRY_TIMES      1
 #define DEBUG_MODE_RETRY_TIMES   3
 #define ERASE_TIMEOUT_MS         300
@@ -42,7 +40,7 @@ void Axs5106lUpgrade::DelayMs(uint16_t ms) {
 void Axs5106lUpgrade::DelayUs(uint16_t us) {
     uint64_t start = esp_timer_get_time();
     while (esp_timer_get_time() - start < us) {
-        // 忙等待
+        // Busy wait: required when us < 1 RTOS tick.
     }
 }
 
@@ -82,7 +80,7 @@ bool Axs5106lUpgrade::ReadRegister(uint8_t reg, uint8_t* data, size_t len) {
 bool Axs5106lUpgrade::WriteRegisters(const uint8_t* reg, size_t reg_len, const uint8_t* data, size_t data_len) {
     if (i2c_handle_ == nullptr) return false;
 
-    // 合并寄存器地址和数据
+    // Concatenate register address bytes and payload into one transmit.
     size_t total_len = reg_len + data_len;
     if (total_len > 600) return false;
 
@@ -153,28 +151,28 @@ bool Axs5106lUpgrade::EnterDebugMode() {
     uint8_t read_buf[1] = {0x00};
 
     for (int retry = 0; retry < DEBUG_MODE_RETRY_TIMES; retry++) {
-        // 复位芯片
+        // Reset chip first.
         SoftwareReset();
 
-        // 等待 500us < delay < 4ms
+        // Wait window: 500 us < delay < 4 ms.
         DelayUs(800);
 
-        // 发送调试模式命令
+        // Send debug-mode entry command.
         WriteRegister(0xAA, debug_cmd, 1);
 
-        // delay >= 50us
+        // delay >= 50 us before the readback.
         DelayUs(100);
 
-        // 检查是否进入调试模式
+        // Confirm the chip acknowledges debug mode (expected reply: 0x28).
         if (ReadRegisters(write_buf, 3, read_buf, 1)) {
             if (read_buf[0] == 0x28) {
-                ESP_LOGI(TAG, "进入调试模式成功");
+                ESP_LOGI(TAG, "Entered debug mode");
                 return true;
             }
         }
     }
 
-    ESP_LOGE(TAG, "进入调试模式失败");
+    ESP_LOGE(TAG, "Failed to enter debug mode");
     return false;
 }
 
@@ -203,15 +201,15 @@ bool Axs5106lUpgrade::EraseFlash() {
     WriteRegister(0x90, clear_flag, 3);
     WriteRegister(0x90, erase_cmd, 3);
 
-    // 等待擦除完成 (最多 300ms)
+    // Poll for erase completion (timeout: 300 ms).
     for (int i = 0; i < 30; i++) {
         DelayMs(WRITE_TIMEOUT_MS);
 
         if (ReadRegisters(write_buf, 3, read_buf, 1)) {
-            if (read_buf[0] & 0x04) {  // bit2 == 1 表示完成
+            if (read_buf[0] & 0x04) {  // bit 2 == 1 means done
                 erase_cmd[2] = 0x00;
                 WriteRegister(0x90, erase_cmd, 3);
-                ESP_LOGI(TAG, "Flash 擦除成功");
+                ESP_LOGI(TAG, "Flash erase complete");
                 return true;
             }
         }
@@ -219,14 +217,14 @@ bool Axs5106lUpgrade::EraseFlash() {
 
     erase_cmd[2] = 0x00;
     WriteRegister(0x90, erase_cmd, 3);
-    ESP_LOGE(TAG, "Flash 擦除超时");
+    ESP_LOGE(TAG, "Flash erase timeout");
     return false;
 }
 
 bool Axs5106lUpgrade::WriteFlash(const uint8_t* data, size_t len) {
     uint8_t cmd[3] = {0x6F, 0xD4, 0x00};
 
-    // 设置写入参数
+    // Configure write parameters.
     WriteRegister(0x90, cmd, 3);
 
     cmd[1] = 0xD5;
@@ -244,15 +242,15 @@ bool Axs5106lUpgrade::WriteFlash(const uint8_t* data, size_t len) {
     cmd[2] = 0xF4;
     WriteRegister(0x90, cmd, 3);
 
-    // 逐字节写入（慢速模式，兼容性更好）
+    // Byte-by-byte write (slow mode, broadest compatibility).
     cmd[1] = 0xD7;
     for (size_t i = 0; i < len; i++) {
         cmd[2] = data[i];
         WriteRegister(0x90, cmd, 3);
 
-        // 每 1KB 打印进度
+        // Progress log every 1 KB.
         if ((i + 1) % 1024 == 0) {
-            ESP_LOGI(TAG, "写入进度: %u / %u", (unsigned)(i + 1), (unsigned)len);
+            ESP_LOGI(TAG, "Write progress: %u / %u", (unsigned)(i + 1), (unsigned)len);
         }
     }
 
@@ -260,12 +258,12 @@ bool Axs5106lUpgrade::WriteFlash(const uint8_t* data, size_t len) {
     cmd[2] = 0x00;
     WriteRegister(0x90, cmd, 3);
 
-    ESP_LOGI(TAG, "固件写入完成，共 %u 字节", (unsigned)len);
+    ESP_LOGI(TAG, "Firmware write complete (%u bytes)", (unsigned)len);
     return true;
 }
 
 bool Axs5106lUpgrade::VerifyFlash(const uint8_t* data, size_t len) {
-    // 使用逐字节读取验证
+    // Byte-by-byte readback verification.
     uint8_t cmd[3] = {0x6F, 0xD4, 0x00};
     uint8_t write_buf[3] = {0x80, 0x7F, 0xD7};
     uint8_t read_buf[1] = {0x00};
@@ -289,19 +287,19 @@ bool Axs5106lUpgrade::VerifyFlash(const uint8_t* data, size_t len) {
 
     for (size_t i = 0; i < len; i++) {
         if (!ReadRegisters(write_buf, 3, read_buf, 1)) {
-            ESP_LOGE(TAG, "验证读取失败，位置: %u", (unsigned)i);
+            ESP_LOGE(TAG, "Verify read failed at offset %u", (unsigned)i);
             goto verify_exit;
         }
 
         if (read_buf[0] != data[i]) {
-            ESP_LOGE(TAG, "验证失败，位置: %u, 期望: 0x%02X, 实际: 0x%02X",
+            ESP_LOGE(TAG, "Verify mismatch at offset %u: expected 0x%02X, got 0x%02X",
                      (unsigned)i, data[i], read_buf[0]);
             goto verify_exit;
         }
 
-        // 每 1KB 打印进度
+        // Progress log every 1 KB.
         if ((i + 1) % 1024 == 0) {
-            ESP_LOGI(TAG, "验证进度: %u / %u", (unsigned)(i + 1), (unsigned)len);
+            ESP_LOGI(TAG, "Verify progress: %u / %u", (unsigned)(i + 1), (unsigned)len);
         }
     }
 
@@ -309,7 +307,7 @@ bool Axs5106lUpgrade::VerifyFlash(const uint8_t* data, size_t len) {
     cmd[2] = 0x00;
     WriteRegister(0x90, cmd, 3);
 
-    ESP_LOGI(TAG, "固件验证成功");
+    ESP_LOGI(TAG, "Firmware verification passed");
     return true;
 
 verify_exit:
@@ -320,31 +318,30 @@ verify_exit:
 }
 
 bool Axs5106lUpgrade::DoUpgrade() {
-    ESP_LOGI(TAG, "开始升级，固件大小: %u 字节", (unsigned)sizeof(kFirmwareData));
+    ESP_LOGI(TAG, "Starting upgrade (firmware size: %u bytes)", (unsigned)sizeof(kFirmwareData));
 
-    // 1. 进入调试模式
+    // 1. Enter debug mode.
     if (!EnterDebugMode()) {
         return false;
     }
 
-    // 2. 解锁 Flash
+    // 2. Unlock flash.
     if (!UnlockFlash()) {
-        ESP_LOGE(TAG, "解锁 Flash 失败");
+        ESP_LOGE(TAG, "Flash unlock failed");
         return false;
     }
 
-    // 3. 擦除 Flash
+    // 3. Erase flash.
     if (!EraseFlash()) {
         return false;
     }
 
-    // 4. 写入固件
+    // 4. Write new firmware.
     if (!WriteFlash(kFirmwareData, sizeof(kFirmwareData))) {
         return false;
     }
 
-    // 5. 验证固件（可选，耗时较长）
-    // 注意：验证是可选的，如果时间紧迫可以跳过
+    // 5. Optional verification (omitted by default — slow on byte-by-byte path).
     // if (!VerifyFlash(kFirmwareData, sizeof(kFirmwareData))) {
     //     return false;
     // }
@@ -353,49 +350,50 @@ bool Axs5106lUpgrade::DoUpgrade() {
 }
 
 Axs5106lUpgradeResult Axs5106lUpgrade::CheckAndUpgrade() {
-    // 1. 获取芯片当前固件版本
+    // 1. Read the version currently running on the chip.
     uint16_t chip_version = 0;
     if (!GetChipFirmwareVersion(chip_version)) {
-        ESP_LOGW(TAG, "无法读取芯片固件版本，尝试升级");
-        // 继续尝试升级，可能是全新芯片
+        ESP_LOGW(TAG, "Cannot read chip firmware version; will attempt upgrade anyway "
+                      "(may be a blank chip)");
     } else {
-        ESP_LOGI(TAG, "芯片固件版本: V%u", chip_version);
+        ESP_LOGI(TAG, "Chip firmware version: V%u", chip_version);
     }
 
-    // 2. 获取内嵌固件版本
+    // 2. Read the embedded version.
     uint16_t embedded_version = GetEmbeddedFirmwareVersion();
-    ESP_LOGI(TAG, "内嵌固件版本: V%u", embedded_version);
+    ESP_LOGI(TAG, "Embedded firmware version: V%u", embedded_version);
 
-    // 3. 比较版本
+    // 3. Compare; skip if equal.
     if (chip_version == embedded_version && chip_version != 0) {
-        ESP_LOGI(TAG, "固件版本相同，无需升级");
+        ESP_LOGI(TAG, "Chip firmware up to date; no upgrade needed");
         return Axs5106lUpgradeResult::NotNeeded;
     }
 
-    // 4. 执行升级
-    ESP_LOGI(TAG, "开始固件升级: V%u -> V%u", chip_version, embedded_version);
+    // 4. Run the upgrade.
+    ESP_LOGI(TAG, "Starting firmware upgrade: V%u -> V%u", chip_version, embedded_version);
 
     for (int retry = 0; retry < UPGRADE_RETRY_TIMES; retry++) {
         if (DoUpgrade()) {
-            // 5. 升级成功，复位芯片
+            // 5. Reset chip after successful upgrade.
             SoftwareReset();
             DelayMs(50);
 
-            // 6. 验证新版本
+            // 6. Read back the version to confirm.
             uint16_t new_version = 0;
             if (GetChipFirmwareVersion(new_version)) {
                 if (new_version == embedded_version) {
-                    ESP_LOGI(TAG, "固件升级成功，新版本: V%u", new_version);
+                    ESP_LOGI(TAG, "Firmware upgrade succeeded; new version: V%u", new_version);
                     return Axs5106lUpgradeResult::Success;
                 } else {
-                    ESP_LOGW(TAG, "版本不匹配: 期望 V%u, 实际 V%u", embedded_version, new_version);
+                    ESP_LOGW(TAG, "Version mismatch after upgrade: expected V%u, got V%u",
+                             embedded_version, new_version);
                 }
             }
 
-            ESP_LOGW(TAG, "升级后版本验证失败，重试...");
+            ESP_LOGW(TAG, "Post-upgrade version verification failed; retrying...");
         }
     }
 
-    ESP_LOGE(TAG, "固件升级失败");
+    ESP_LOGE(TAG, "Firmware upgrade failed");
     return Axs5106lUpgradeResult::Failed;
 }

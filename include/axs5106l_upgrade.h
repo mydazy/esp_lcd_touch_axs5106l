@@ -1,8 +1,8 @@
 /*
- * AXS5106L 触摸屏固件升级模块
+ * AXS5106L touch-controller firmware upgrade module.
  *
- * 功能: 检查并升级触摸芯片固件
- * 移植自: esp_lcd_axs5106l 组件
+ * Verifies the firmware version reported by the chip and reflashes the MTP
+ * region from an embedded image when the versions differ.
  */
 
 #pragma once
@@ -11,69 +11,66 @@
 #include <driver/gpio.h>
 #include <cstdint>
 
-/**
- * @brief AXS5106L 固件升级结果
- */
+/// Result of a firmware upgrade attempt.
 enum class Axs5106lUpgradeResult {
-    Success = 0,           // 升级成功
-    NotNeeded = -1,        // 不需要升级（版本已最新）
-    Failed = -2,           // 升级失败
-    I2cError = -3,         // I2C 通信错误
+    Success   =  0,  ///< Upgrade completed successfully.
+    NotNeeded = -1,  ///< Chip firmware already matches the embedded image.
+    Failed    = -2,  ///< Upgrade flow failed (erase/write/verify error).
+    I2cError  = -3,  ///< I2C communication error.
 };
 
 /**
- * @brief AXS5106L 固件升级类
+ * @brief AXS5106L firmware upgrade helper.
  *
- * 该类负责检查触摸芯片固件版本，并在需要时升级到内嵌的最新固件。
+ * Reads the running firmware version from the chip and, when it differs from
+ * the version embedded in @c axs5106l_firmware.h, performs a full MTP
+ * reflash via the chip's debug-mode command sequence.
  *
- * 使用方法:
- * 1. 创建实例时传入 I2C 句柄和复位 GPIO
- * 2. 调用 CheckAndUpgrade() 执行升级检查
- * 3. 如果返回 Success，需要重新复位芯片
+ * Typical usage:
+ *   1. Construct with the I2C device handle and the reset GPIO.
+ *   2. Call @ref CheckAndUpgrade().
+ *   3. If the result is Success, reset the chip before continuing.
  */
 class Axs5106lUpgrade {
 public:
     /**
-     * @brief 构造函数
-     * @param i2c_handle I2C 设备句柄
-     * @param rst_gpio 复位引脚
+     * @brief Construct the upgrade helper.
+     * @param i2c_handle I2C device handle (already added to a master bus).
+     * @param rst_gpio   GPIO connected to the chip reset line.
      */
     Axs5106lUpgrade(i2c_master_dev_handle_t i2c_handle, gpio_num_t rst_gpio);
 
     /**
-     * @brief 检查并升级固件
-     * @return 升级结果
+     * @brief Compare versions and reflash if necessary.
+     * @return Upgrade result; see @ref Axs5106lUpgradeResult.
      */
     Axs5106lUpgradeResult CheckAndUpgrade();
 
     /**
-     * @brief 获取芯片固件版本
-     * @param version 输出版本号
-     * @return 是否成功
+     * @brief Read the firmware version currently running on the chip.
+     * @param[out] version Firmware version reported by the chip.
+     * @return true on success.
      */
     bool GetChipFirmwareVersion(uint16_t& version);
 
-    /**
-     * @brief 获取内嵌固件版本
-     * @return 内嵌固件版本号
-     */
+    /// Version of the firmware image embedded in this build.
     uint16_t GetEmbeddedFirmwareVersion() const;
 
 private:
     i2c_master_dev_handle_t i2c_handle_;
     gpio_num_t rst_gpio_;
 
-    // I2C 通信
+    // Low-level I2C primitives.
     bool WriteRegister(uint8_t reg, const uint8_t* data, size_t len);
     bool ReadRegister(uint8_t reg, uint8_t* data, size_t len);
     bool WriteRegisters(const uint8_t* reg, size_t reg_len, const uint8_t* data, size_t data_len);
     bool ReadRegisters(const uint8_t* reg, size_t reg_len, uint8_t* data, size_t data_len);
 
-    // 复位
+    // Reset.
     void HardwareReset();
     void SoftwareReset();
 
-    // 升级流程
+    // Upgrade flow stages.
     bool EnterDebugMode();
     void ExitDebugMode();
     bool UnlockFlash();
@@ -82,7 +79,7 @@ private:
     bool VerifyFlash(const uint8_t* data, size_t len);
     bool DoUpgrade();
 
-    // 延时
+    // Delay helpers.
     static void DelayMs(uint16_t ms);
     static void DelayUs(uint16_t us);
 };

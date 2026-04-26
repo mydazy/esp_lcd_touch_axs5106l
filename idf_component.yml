@@ -1,4 +1,4 @@
-version: "1.0.1"
+version: "1.0.2"
 description: "AXS5106L capacitive touch panel driver (ChipSourceTek) with gesture recognition, LVGL input integration and runtime firmware upgrade"
 url: "https://github.com/mydazy/esp_lcd_touch_axs5106l"
 repository: "https://github.com/mydazy/esp_lcd_touch_axs5106l.git"

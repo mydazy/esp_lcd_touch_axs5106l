@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Verify the component itself compiles cleanly under multiple IDF versions.
+  build-component:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        idf-version: ["release-v5.3", "release-v5.4", "release-v5.5"]
+        idf-target: ["esp32s3"]
+    container:
+      image: espressif/idf:${{ matrix.idf-version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build every example/* project so users have a known-good reference.
+      - name: Build all examples
+        shell: bash
+        run: |
+          if [ ! -d examples ]; then
+              echo "No examples/ directory — skipping."
+              exit 0
+          fi
+          for ex in examples/*/; do
+              echo "═══════════════════════════════════════════════════════"
+              echo "Building $ex on ${{ matrix.idf-target }} / ${{ matrix.idf-version }}"
+              echo "═══════════════════════════════════════════════════════"
+              cd "$ex"
+              . $IDF_PATH/export.sh
+              idf.py set-target ${{ matrix.idf-target }}
+              idf.py build
+              cd -
+          done
