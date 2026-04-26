@@ -1,0 +1,28 @@
+name: Release to Espressif Registry & GitHub
+on:
+  push:
+    tags: ['v*.*.*']
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload to Espressif Component Registry
+        uses: espressif/upload-components-ci-action@v2
+        with:
+          name: ${{ github.event.repository.name }}
+          namespace: mydazy
+          api_token: ${{ secrets.IDF_COMPONENT_API_TOKEN }}
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v v="$ver" 'BEGIN{f=0} /^## \[/{ if(f)exit; if($0 ~ "\\["v"\\]") f=1; next } f' CHANGELOG.md > /tmp/notes.md
+          cat /tmp/notes.md
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/notes.md

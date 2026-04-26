@@ -1,0 +1,27 @@
+version: "1.0.1"
+description: "AXS5106L capacitive touch panel driver (ChipSourceTek) with gesture recognition, LVGL input integration and runtime firmware upgrade"
+url: "https://github.com/mydazy/esp_lcd_touch_axs5106l"
+repository: "https://github.com/mydazy/esp_lcd_touch_axs5106l.git"
+documentation: "https://github.com/mydazy/esp_lcd_touch_axs5106l#readme"
+issues: "https://github.com/mydazy/esp_lcd_touch_axs5106l/issues"
+license: "Apache-2.0"
+tags:
+  - touch
+  - touchpanel
+  - esp_lcd_touch
+  - axs5106l
+  - axs15231b
+  - chipsourcetek
+  - lvgl
+  - i2c
+  - gesture
+maintainers:
+  - "mydazy <opensource@mydazy.com>"
+dependencies:
+  idf: ">=5.3"
+  espressif/esp_lvgl_port: "^2.0.0"
+files:
+  exclude:
+    - "test/**"
+    - "examples/**/build/**"
+    - ".github/**"
